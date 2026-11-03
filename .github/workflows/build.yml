@@ -26,25 +26,103 @@ jobs:
       - name: Create VALID assets
         run: |
           mkdir -p assets
-          # Download REAL 1024x1024 Expo icon (valid PNG JIMP can read)
-          curl -L -o assets/icon.png https://raw.githubusercontent.com/expo/expo/main/templates/expo-template-blank/assets/icon.png || \
-          curl -L -o assets/icon.png https://raw.githubusercontent.com/expo/expo/main/packages/expo-cli/static/icons/ios-1024.png
+          curl -L -o assets/icon.png https://raw.githubusercontent.com/expo/expo/main/templates/expo-template-blank/assets/icon.png
           cp assets/icon.png assets/splash.png
           cp assets/icon.png assets/adaptive-icon.png
           cp assets/icon.png assets/favicon.png
-          file assets/icon.png
-          ls -lh assets/
           
       - name: Clean and Prebuild
         run: |
           rm -rf android
           npx expo prebuild --platform android --clean
           
+      - name: FIX publication.version bug
+        run: |
+          # Find and fix all expo modules missing version
+          node - <<'NODE'
+          const fs=require('fs');
+          const glob=require('fs').readdirSync('node_modules');
+          const path=require('path');
+          function walk(dir){
+            const files=fs.readdirSync(dir,{withFileTypes:true});
+            for(const f of files){
+              const p=path.join(dir,f.name);
+              if(f.isDirectory()){
+                if(p.includes('node_modules')) walk(p);
+              }else if(f.name==='expo-module.config.json'){
+                try{
+                  const j=JSON.parse(fs.readFileSync(p,'utf8'));
+                  let changed=false;
+                  if(j.platforms && j.platforms.includes('android')){
+                    // check for publication
+                  }
+                  // Generic fix: if android.projects has publication without version
+                  if(j.android && j.android.projects){
+                    for(const proj of j.android.projects){
+                      if(proj.publication && !proj.publication.version){
+                        proj.publication.version='1.0.0';
+                        changed=true;
+                      }
+                    }
+                  }
+                  // New format: android.modules
+                  if(j.android && j.android.modules){
+                    // noop
+                  }
+                  if(changed){
+                    fs.writeFileSync(p, JSON.stringify(j,null,2));
+                    console.log('Fixed',p);
+                  }
+                }catch(e){}
+              }
+            }
+          }
+          // Walk all expo modules
+          const modsDir='node_modules';
+          for(const d of fs.readdirSync(modsDir)){
+            const modPath=path.join(modsDir,d,'expo-module.config.json');
+            if(fs.existsSync(modPath)){
+              try{
+                const j=JSON.parse(fs.readFileSync(modPath,'utf8'));
+                let c=false;
+                if(j.android && j.android.projects){
+                  for(const pr of j.android.projects){
+                    if(pr.publication && !pr.publication.version){pr.publication.version='1.0.0';c=true;}
+                  }
+                }
+                if(c){fs.writeFileSync(modPath,JSON.stringify(j,null,2)); console.log('Fixed',modPath);}
+              }catch(e){}
+            }
+            // scoped packages
+            const scoped=path.join(modsDir,d);
+            if(fs.statSync(scoped).isDirectory() && d.startsWith('@')){
+              for(const sd of fs.readdirSync(scoped)){
+                const sp=path.join(scoped,sd,'expo-module.config.json');
+                if(fs.existsSync(sp)){
+                  try{
+                    const j=JSON.parse(fs.readFileSync(sp,'utf8'));
+                    let c=false;
+                    if(j.android && j.android.projects){
+                      for(const pr of j.android.projects){
+                        if(pr.publication && !pr.publication.version){pr.publication.version='1.0.0';c=true;}
+                      }
+                    }
+                    if(c){fs.writeFileSync(sp,JSON.stringify(j,null,2)); console.log('Fixed',sp);}
+                  }catch(e){}
+                }
+              }
+            }
+          }
+          console.log('Done patching');
+          NODE
+          # Also patch settings.gradle.json if exists
+          find android -name "*.json" -exec grep -l "publication" {} \; | head
+          
       - name: Build APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --stacktrace
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
