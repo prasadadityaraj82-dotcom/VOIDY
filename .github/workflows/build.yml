@@ -22,33 +22,26 @@ jobs:
         run: |
           npm install
           npx expo install --fix
-          npm install @expo/config-plugins --save-dev || true
           
       - name: Create assets if missing
         run: |
           mkdir -p assets
-          if [ ! -f assets/icon.png ]; then
-            echo "[STRIPPED 92 bytes]" | base64 -d > assets/icon.png
-          fi
-          cp assets/icon.png assets/splash.png 2>/dev/null || true
-          cp assets/icon.png assets/adaptive-icon.png 2>/dev/null || true
+          node -e "require('fs').writeFileSync('assets/icon.png', Buffer.from([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,2,0,0,0,144,119,83,222,0,0,0,12,73,68,65,84,8,215,99,0,1,0,0,5,0,1,13,10,45,180,0,0,0,0,73,69,78,68,174,66,96,130]))"
+          cp assets/icon.png assets/splash.png || true
+          cp assets/icon.png assets/adaptive-icon.png || true
+          cp assets/icon.png assets/favicon.png || true
+          ls -lh assets/
           
       - name: Clean and Prebuild
         run: |
           rm -rf android
           npx expo prebuild --platform android --clean
           
-      - name: Fix gradle publication bug
-        run: |
-          # Fix for expo.modules.plugin.configuration.Publication version bug
-          find android -name "*.json" -path "*expo*" -exec sed -i 's/"publication":/"publication": {"version": "1.0.0", /g' {} \; || true
-          cat android/app/build.gradle | head -100
-          
       - name: Build APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleRelease
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
