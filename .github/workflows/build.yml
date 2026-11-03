@@ -23,13 +23,16 @@ jobs:
           npm install
           npx expo install --fix
           
-      - name: Create assets if missing
+      - name: Create VALID assets
         run: |
           mkdir -p assets
-          node -e "require('fs').writeFileSync('assets/icon.png', Buffer.from([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,2,0,0,0,144,119,83,222,0,0,0,12,73,68,65,84,8,215,99,0,1,0,0,5,0,1,13,10,45,180,0,0,0,0,73,69,78,68,174,66,96,130]))"
-          cp assets/icon.png assets/splash.png || true
-          cp assets/icon.png assets/adaptive-icon.png || true
-          cp assets/icon.png assets/favicon.png || true
+          # Download REAL 1024x1024 Expo icon (valid PNG JIMP can read)
+          curl -L -o assets/icon.png https://raw.githubusercontent.com/expo/expo/main/templates/expo-template-blank/assets/icon.png || \
+          curl -L -o assets/icon.png https://raw.githubusercontent.com/expo/expo/main/packages/expo-cli/static/icons/ios-1024.png
+          cp assets/icon.png assets/splash.png
+          cp assets/icon.png assets/adaptive-icon.png
+          cp assets/icon.png assets/favicon.png
+          file assets/icon.png
           ls -lh assets/
           
       - name: Clean and Prebuild
