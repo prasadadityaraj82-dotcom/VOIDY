@@ -18,33 +18,37 @@ jobs:
           distribution: temurin
           java-version: 17
           
-      - name: Install dependencies
-        run: npm install
-        
-      - name: Create missing assets
+      - name: Install and fix dependencies
+        run: |
+          npm install
+          npx expo install --fix
+          npm install @expo/config-plugins --save-dev || true
+          
+      - name: Create assets if missing
         run: |
           mkdir -p assets
-          # Create 1x1 transparent PNGs as placeholder if missing (Expo will accept)
-          # Using base64 for a valid PNG
           if [ ! -f assets/icon.png ]; then
-            echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=" | base64 -d > assets/icon.png
+            echo "[STRIPPED 92 bytes]" | base64 -d > assets/icon.png
           fi
-          if [ ! -f assets/splash.png ]; then
-            cp assets/icon.png assets/splash.png
-          fi
-          if [ ! -f assets/adaptive-icon.png ]; then
-            cp assets/icon.png assets/adaptive-icon.png
-          fi
-          ls -lh assets/
-        
-      - name: Prebuild Android
-        run: npx expo prebuild --platform android --clean
-        
+          cp assets/icon.png assets/splash.png 2>/dev/null || true
+          cp assets/icon.png assets/adaptive-icon.png 2>/dev/null || true
+          
+      - name: Clean and Prebuild
+        run: |
+          rm -rf android
+          npx expo prebuild --platform android --clean
+          
+      - name: Fix gradle publication bug
+        run: |
+          # Fix for expo.modules.plugin.configuration.Publication version bug
+          find android -name "*.json" -path "*expo*" -exec sed -i 's/"publication":/"publication": {"version": "1.0.0", /g' {} \; || true
+          cat android/app/build.gradle | head -100
+          
       - name: Build APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --stacktrace
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
